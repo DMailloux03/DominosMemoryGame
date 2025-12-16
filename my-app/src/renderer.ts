@@ -2,7 +2,7 @@
 
 type PortionRecord = {
   id: string;
-  category: 'Sauce' | 'Cheese';
+  category: 'Sauce' | 'Cheese' | 'Topping';
   crust: string;
   item: string;
   size: string;
@@ -29,6 +29,7 @@ type PizzaOrder = {
   toppingLabel: string | null;
   sauce: PortionRecord;
   cheeses: PortionRecord[];
+  toppingRecords: PortionRecord[];
   modifier: OrderModifier;
 };
 
@@ -49,23 +50,67 @@ const GLUTEN_FREE_SIZES = ['10"'] as const;
 const NEW_YORK_SIZES = ['12"', '14"', '16"'] as const;
 const PAN_SIZE = ['12"'] as const;
 const TOPPING_LABELS = ['1 topping', '2 toppings', '3 toppings', '4+ toppings'] as const;
-const TOPPING_LIBRARY = [
-  'Pepperoni',
-  'Sausage',
-  'Beef',
-  'Ham',
-  'Bacon',
-  'Mushroom',
-  'Onion',
-  'Green Pepper',
-  'Black Olive',
-  'Spinach',
-  'Tomato',
-  'Jalapeño',
-  'Banana Pepper',
-  'Roasted Red Pepper',
-  'Pineapple',
+type ToppingBandKey = 'single' | 'twoThree' | 'fourPlus';
+
+const TOPPING_BAND_LABEL: Record<ToppingBandKey, string> = {
+  single: '1 topping portion',
+  twoThree: '2-3 topping portion',
+  fourPlus: '4+ topping portion',
+};
+
+const TOPPING_PORTION_SIZES = ['10"', '12"', '14"', '16"'] as const;
+
+const buildToppingSizeMap = (values: [number, number, number, number]): Record<string, number> => ({
+  '10"': values[0],
+  '12"': values[1],
+  '14"': values[2],
+  '16"': values[3],
+});
+
+type ToppingCategoryData = {
+  name: string;
+  toppings: string[];
+  ounces: Record<ToppingBandKey, Record<string, number>>;
+};
+
+const TOPPING_CATEGORIES: ToppingCategoryData[] = [
+  {
+    name: 'Philly Steak & Bacon',
+    toppings: ['Philly Steak', 'Bacon'],
+    ounces: {
+      single: buildToppingSizeMap([2.0, 2.5, 3.5, 5.0]),
+      twoThree: buildToppingSizeMap([1.5, 2.0, 2.5, 3.5]),
+      fourPlus: buildToppingSizeMap([1.0, 1.5, 2.0, 2.5]),
+    },
+  },
+  {
+    name: 'Sausage / Beef / Chicken / Mushroom / Pineapple / Tomato',
+    toppings: ['Sausage', 'Beef', 'Chicken', 'Mushroom', 'Pineapple', 'Tomato'],
+    ounces: {
+      single: buildToppingSizeMap([2.5, 3.5, 5.0, 6.5]),
+      twoThree: buildToppingSizeMap([1.5, 2.5, 3.5, 4.5]),
+      fourPlus: buildToppingSizeMap([1.0, 1.5, 2.0, 2.5]),
+    },
+  },
+  {
+    name: 'Onion / Green Pepper / Olives / Banana Pepper / Jalapeno / Green Chilies',
+    toppings: ['Onion', 'Green Pepper', 'Olives', 'Banana Pepper', 'Jalapeno', 'Green Chilies'],
+    ounces: {
+      single: buildToppingSizeMap([1.5, 2.0, 3.0, 4.0]),
+      twoThree: buildToppingSizeMap([1.0, 1.5, 2.0, 2.5]),
+      fourPlus: buildToppingSizeMap([0.5, 1.0, 1.5, 2.0]),
+    },
+  },
 ];
+
+const TOPPING_CATEGORY_LOOKUP = new Map<string, ToppingCategoryData>();
+TOPPING_CATEGORIES.forEach((category) => {
+  category.toppings.forEach((topping) => {
+    TOPPING_CATEGORY_LOOKUP.set(topping, category);
+  });
+});
+
+const TOPPING_LIBRARY = Array.from(TOPPING_CATEGORY_LOOKUP.keys());
 
 const ORDER_MODIFIERS: OrderModifier[] = [
   {
@@ -445,6 +490,47 @@ const getCheeseRecordsForOrder = (
   return [];
 };
 
+const getToppingBandKey = (count: number): ToppingBandKey => {
+  if (count <= 1) {
+    return 'single';
+  }
+  if (count <= 3) {
+    return 'twoThree';
+  }
+  return 'fourPlus';
+};
+
+const buildToppingRecords = (toppings: string[], size: string, toppingCount: number): PortionRecord[] => {
+  if (toppingCount <= 0) {
+    return [];
+  }
+  const bandKey = getToppingBandKey(toppingCount);
+  return toppings
+    .map((name) => {
+      const category = TOPPING_CATEGORY_LOOKUP.get(name);
+      if (!category) {
+        console.warn(`Missing topping data for ${name}`);
+        return null;
+      }
+      const amount = category.ounces[bandKey][size];
+      if (typeof amount !== 'number') {
+        console.warn(`Missing topping data for ${name} at size ${size}`);
+        return null;
+      }
+      return {
+        id: sanitizeId(`topping-${name}-${bandKey}-${size}`),
+        category: 'Topping',
+        crust: 'Topping portion',
+        item: name,
+        detail: TOPPING_BAND_LABEL[bandKey],
+        size,
+        amount,
+        note: `${category.name} chart`,
+      };
+    })
+    .filter((record): record is PortionRecord => Boolean(record));
+};
+
 const chooseSauceRecord = (crust: string, size: string): PortionRecord => {
   const exact = findRecords(
     (record) => record.category === 'Sauce' && record.crust === crust && record.size === size,
@@ -505,6 +591,7 @@ const generateOrder = (includeSpecialRequest: boolean): PizzaOrder => {
   const toppingLabel = getToppingLabel(toppingCount);
   const sauce = chooseSauceRecord(crustOption.dataCrust, size);
   const cheeses = getCheeseRecordsForOrder(crustOption.dataCrust, size, toppingLabel, toppingCount);
+  const toppingRecords = buildToppingRecords(toppings, size, toppingCount);
   const modifier = includeSpecialRequest ? pickModifier({ sauce, cheeses }) : ORDER_MODIFIERS[0];
   return {
     crust: crustOption.label,
@@ -514,6 +601,7 @@ const generateOrder = (includeSpecialRequest: boolean): PizzaOrder => {
     toppingLabel,
     sauce,
     cheeses,
+    toppingRecords,
     modifier,
   };
 };
@@ -658,31 +746,45 @@ const sizeToNumber = (size: string) => {
   return Number.isNaN(numeric) ? 0 : numeric;
 };
 
+const appendCheatRow = (labelText: string, crustText: string, valuesText: string) => {
+  const row = document.createElement('div');
+  row.className = 'cheat-row';
+  const infoCol = document.createElement('div');
+  infoCol.className = 'cheat-info';
+  const labelEl = document.createElement('span');
+  labelEl.className = 'cheat-label';
+  labelEl.textContent = labelText;
+  const crustEl = document.createElement('span');
+  crustEl.className = 'cheat-crust';
+  crustEl.textContent = crustText;
+  infoCol.append(labelEl, crustEl);
+
+  const valuesEl = document.createElement('span');
+  valuesEl.className = 'cheat-values';
+  valuesEl.textContent = valuesText;
+
+  row.append(infoCol, valuesEl);
+  cheatGrid.appendChild(row);
+};
+
 Array.from(referenceGroups.values())
   .sort((a, b) => a.label.localeCompare(b.label))
   .forEach((group) => {
     group.records.sort((a, b) => sizeToNumber(a.size) - sizeToNumber(b.size));
-    const row = document.createElement('div');
-    row.className = 'cheat-row';
-    const infoCol = document.createElement('div');
-    infoCol.className = 'cheat-info';
-    const labelEl = document.createElement('span');
-    labelEl.className = 'cheat-label';
-    labelEl.textContent = group.label;
-    const crustEl = document.createElement('span');
-    crustEl.className = 'cheat-crust';
-    crustEl.textContent = group.crust;
-    infoCol.append(labelEl, crustEl);
-
-    const valuesEl = document.createElement('span');
-    valuesEl.className = 'cheat-values';
-    valuesEl.textContent = group.records
+    const values = group.records
       .map((record) => `${record.size}: ${formatAmount(record.amount)} ${record.unit ?? 'oz'}`)
       .join(' • ');
-
-    row.append(infoCol, valuesEl);
-    cheatGrid.appendChild(row);
+    appendCheatRow(group.label, group.crust, values);
   });
+
+TOPPING_CATEGORIES.forEach((category) => {
+  (['single', 'twoThree', 'fourPlus'] as ToppingBandKey[]).forEach((bandKey) => {
+    const values = TOPPING_PORTION_SIZES.map(
+      (size) => `${size}: ${formatAmount(category.ounces[bandKey][size])} oz`,
+    ).join(' • ');
+    appendCheatRow(`${category.name} – ${TOPPING_BAND_LABEL[bandKey]}`, 'Topping portions', values);
+  });
+});
 
 const score = { points: 0, best: 0, answered: 0 };
 let currentOrder: PizzaOrder | null = null;
@@ -807,6 +909,10 @@ const buildFields = (order: PizzaOrder) => {
     }
 
     recordsToRender.push(...otherCheeseRecords);
+  }
+
+  if (order.toppingRecords.length > 0) {
+    recordsToRender.push(...order.toppingRecords);
   }
 
   recordsToRender.forEach((record) => {
