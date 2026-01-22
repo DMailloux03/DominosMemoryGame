@@ -253,11 +253,7 @@ const validatePlayerName = (value: string) => {
   return null;
 };
 
-const getRedirectUrl = () => {
-  const base = import.meta.env.BASE_URL ?? '/';
-  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
-  return `${location.origin}${normalizedBase}`;
-};
+const getRedirectUrl = () => new URL('.', location.href).href;
 
 type BuildPortionOptions = {
   category: PortionRecord['category'];
