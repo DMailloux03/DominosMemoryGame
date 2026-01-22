@@ -1,8 +1,10 @@
-﻿import "./index.css";
+import { createClient } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
+import "./index.css";
 
 type PortionRecord = {
   id: string;
-  category: 'Sauce' | 'Cheese' | 'Topping';
+  category: 'Sauce' | 'Cheese' | 'Topping' | 'Pasta';
   crust: string;
   item: string;
   size: string;
@@ -22,6 +24,7 @@ type OrderModifier = {
 };
 
 type PizzaOrder = {
+  kind: 'Pizza';
   crust: string;
   dataCrust: string;
   size: string;
@@ -32,6 +35,17 @@ type PizzaOrder = {
   toppingRecords: PortionRecord[];
   modifier: OrderModifier;
 };
+
+type PastaOrder = {
+  kind: 'Pasta';
+  recipe: string;
+  size: string;
+  records: PortionRecord[];
+};
+
+type GameOrder = PizzaOrder | PastaOrder;
+
+type AppView = 'menu' | 'game' | 'leaderboard' | 'reference' | 'about';
 
 type QuizField = {
   id: string;
@@ -49,6 +63,7 @@ const THIN_CRUST_SIZES = ['12"', '14"'] as const;
 const GLUTEN_FREE_SIZES = ['10"'] as const;
 const NEW_YORK_SIZES = ['12"', '14"', '16"'] as const;
 const PAN_SIZE = ['12"'] as const;
+const PASTA_SIZE = ['Tin'] as const;
 const TOPPING_LABELS = ['1 topping', '2 toppings', '3 toppings', '4+ toppings'] as const;
 type ToppingBandKey = 'single' | 'twoThree' | 'fourPlus';
 
@@ -93,8 +108,8 @@ const TOPPING_CATEGORIES: ToppingCategoryData[] = [
     },
   },
   {
-    name: 'Onion / Green Pepper / Olives / Banana Pepper / Jalapeno / Green Chilies',
-    toppings: ['Onion', 'Green Pepper', 'Olives', 'Banana Pepper', 'Jalapeno', 'Green Chilies'],
+    name: 'Onion / Green Pepper / Black Olives / Banana Pepper / Jalapeno',
+    toppings: ['Onion', 'Green Pepper', 'Black Olives', 'Banana Pepper', 'Jalapeno'],
     ounces: {
       single: buildToppingSizeMap([1.5, 2.0, 3.0, 4.0]),
       twoThree: buildToppingSizeMap([1.0, 1.5, 2.0, 2.5]),
@@ -160,6 +175,28 @@ const ORDER_MODIFIERS: OrderModifier[] = [
 const formatAmount = (amount: number) =>
   Number.isInteger(amount) ? amount.toString() : amount.toFixed(1);
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+const supabase =
+  SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const LEADERBOARD_TABLE = 'leaderboard_entries';
+const PLAYER_NAME_KEY = 'dominos.playerName';
+const BEST_SCORE_KEY = 'dominos.bestScore';
+const BEST_STREAK_KEY = 'dominos.bestStreak';
+const NAME_MIN_LENGTH = 2;
+const NAME_MAX_LENGTH = 18;
+const NAME_PATTERN = /^[a-z0-9 ]+$/i;
+const BANNED_WORDS = [
+  'fuck',
+  'shit',
+  'bitch',
+  'ass',
+  'dick',
+  'pussy',
+  'cunt',
+];
+const LEADERBOARD_LIMIT = 10;
+
 const randomItem = <T,>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
 
 const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -185,6 +222,42 @@ const getToppingLabel = (count: number): string | null => {
 
 const sanitizeId = (value: string) =>
   value.replace(/"/g, 'inch').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+
+const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
+const loadNumber = (key: string) => {
+  const raw = localStorage.getItem(key);
+  if (!raw) return 0;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const loadName = () => localStorage.getItem(PLAYER_NAME_KEY) ?? '';
+
+const isNameClean = (value: string) => {
+  const normalized = normalizeName(value);
+  return !BANNED_WORDS.some((word) => normalized.includes(word));
+};
+
+const validatePlayerName = (value: string) => {
+  const trimmed = value.trim();
+  if (trimmed.length < NAME_MIN_LENGTH || trimmed.length > NAME_MAX_LENGTH) {
+    return `Name must be ${NAME_MIN_LENGTH}-${NAME_MAX_LENGTH} characters.`;
+  }
+  if (!NAME_PATTERN.test(trimmed)) {
+    return 'Use letters, numbers, and spaces only.';
+  }
+  if (!isNameClean(trimmed)) {
+    return 'Choose a different name.';
+  }
+  return null;
+};
+
+const getRedirectUrl = () => {
+  const base = import.meta.env.BASE_URL ?? '/';
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  return `${location.origin}${normalizedBase}`;
+};
 
 type BuildPortionOptions = {
   category: PortionRecord['category'];
@@ -356,6 +429,184 @@ const basePortionRecords: PortionRecord[] = [
     amounts: [2.0, 2.5, 3.5],
   }),
 ];
+
+const pastaPortionRecords: PortionRecord[] = [
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Chicken Alfredo',
+    item: 'Chicken',
+    sizes: PASTA_SIZE,
+    amounts: [2.0],
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Chicken Alfredo',
+    item: 'Alfredo Sauce',
+    sizes: PASTA_SIZE,
+    amounts: [4.0],
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Italian Sausage Marinara',
+    item: 'Pizza Sauce',
+    sizes: PASTA_SIZE,
+    amounts: [4.0],
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Italian Sausage Marinara',
+    item: 'Italian Sausage',
+    sizes: PASTA_SIZE,
+    amounts: [2.0],
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Italian Sausage Marinara',
+    item: 'Shredded Provolone',
+    sizes: PASTA_SIZE,
+    amounts: [1.5],
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: '5-Cheese Mac & Cheese',
+    item: 'Pasta',
+    sizes: PASTA_SIZE,
+    amounts: [5.5],
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: '5-Cheese Mac & Cheese',
+    item: 'American Cheese',
+    detail: 'slices',
+    sizes: PASTA_SIZE,
+    amounts: [2],
+    unit: 'slices',
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: '5-Cheese Mac & Cheese',
+    item: 'Shredded Parm Asiago',
+    sizes: PASTA_SIZE,
+    amounts: [0.2],
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: '5-Cheese Mac & Cheese',
+    item: 'Cheddar Cheese Blend',
+    sizes: PASTA_SIZE,
+    amounts: [2.0],
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: '5-Cheese Mac & Cheese',
+    item: 'Alfredo Sauce',
+    sizes: PASTA_SIZE,
+    amounts: [4.0],
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: '5-Cheese Mac & Cheese',
+    item: 'Jalapeno',
+    detail: 'Optional add-on',
+    sizes: PASTA_SIZE,
+    amounts: [0.7],
+    note: 'Add after American cheese.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: '5-Cheese Mac & Cheese',
+    item: 'Bacon',
+    detail: 'Optional add-on',
+    sizes: PASTA_SIZE,
+    amounts: [1.0],
+    note: 'Add after American cheese.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Spicy Buffalo 5-Cheese Mac & Cheese',
+    item: 'Pasta',
+    sizes: PASTA_SIZE,
+    amounts: [5.5],
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Spicy Buffalo 5-Cheese Mac & Cheese',
+    item: 'American Cheese',
+    detail: 'slices',
+    sizes: PASTA_SIZE,
+    amounts: [2],
+    unit: 'slices',
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Spicy Buffalo 5-Cheese Mac & Cheese',
+    item: 'Shredded Parm Asiago',
+    sizes: PASTA_SIZE,
+    amounts: [0.2],
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Spicy Buffalo 5-Cheese Mac & Cheese',
+    item: 'Cheddar Cheese Blend',
+    sizes: PASTA_SIZE,
+    amounts: [2.0],
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Spicy Buffalo 5-Cheese Mac & Cheese',
+    item: 'Alfredo Sauce',
+    sizes: PASTA_SIZE,
+    amounts: [4.0],
+    note: 'Tin only.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Spicy Buffalo 5-Cheese Mac & Cheese',
+    item: 'Jalapeno',
+    detail: 'Optional add-on',
+    sizes: PASTA_SIZE,
+    amounts: [0.7],
+    note: 'Add after American cheese.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Spicy Buffalo 5-Cheese Mac & Cheese',
+    item: 'Bacon',
+    detail: 'Optional add-on',
+    sizes: PASTA_SIZE,
+    amounts: [1.0],
+    note: 'Add after American cheese.',
+  }),
+  ...buildPortionSet({
+    category: 'Pasta',
+    crust: 'Spicy Buffalo 5-Cheese Mac & Cheese',
+    item: 'Hot Buffalo',
+    detail: 'Post bake',
+    sizes: PASTA_SIZE,
+    amounts: [0.5],
+  }),
+];
+
+basePortionRecords.push(...pastaPortionRecords);
+
+const PASTA_RECIPES = new Map<string, PortionRecord[]>();
+pastaPortionRecords.forEach((record) => {
+  const existing = PASTA_RECIPES.get(record.crust);
+  if (existing) {
+    existing.push(record);
+  } else {
+    PASTA_RECIPES.set(record.crust, [record]);
+  }
+});
 
 const glutenFreeExpandedRecords = basePortionRecords.flatMap((record) => {
   const matchesHandTossedTenInch = record.size === '10"' && record.crust === 'Hand Tossed / Thin';
@@ -583,7 +834,7 @@ const pickModifier = (orderParts: { sauce: PortionRecord; cheeses: PortionRecord
   return randomItem(special);
 };
 
-const generateOrder = (includeSpecialRequest: boolean): PizzaOrder => {
+const generatePizzaOrder = (includeSpecialRequest: boolean): PizzaOrder => {
   const crustOption = randomItem(CRUST_OPTIONS);
   const size = randomItem([...crustOption.sizes]);
   const toppingCount = randomInt(0, 4);
@@ -594,6 +845,7 @@ const generateOrder = (includeSpecialRequest: boolean): PizzaOrder => {
   const toppingRecords = buildToppingRecords(toppings, size, toppingCount);
   const modifier = includeSpecialRequest ? pickModifier({ sauce, cheeses }) : ORDER_MODIFIERS[0];
   return {
+    kind: 'Pizza',
     crust: crustOption.label,
     dataCrust: crustOption.dataCrust,
     size,
@@ -606,7 +858,24 @@ const generateOrder = (includeSpecialRequest: boolean): PizzaOrder => {
   };
 };
 
-const applyModifier = (record: PortionRecord, modifier: OrderModifier) => {
+const generatePastaOrder = (): PastaOrder => {
+  const recipes = Array.from(PASTA_RECIPES.keys());
+  const recipe = randomItem(recipes);
+  const records = PASTA_RECIPES.get(recipe) ?? [];
+  return {
+    kind: 'Pasta',
+    recipe,
+    size: 'Tin',
+    records,
+  };
+};
+
+const generateOrder = (includeSpecialRequest: boolean): GameOrder => {
+  const usePasta = PASTA_RECIPES.size > 0 && Math.random() < 0.25;
+  return usePasta ? generatePastaOrder() : generatePizzaOrder(includeSpecialRequest);
+};
+
+const applyModifier = (record: PortionRecord, modifier: OrderModifier | null) => {
   if (!modifier || modifier.multiplier === 1) {
     return record.amount;
   }
@@ -629,24 +898,127 @@ if (!root) {
 
 const shell = document.createElement('main');
 shell.className = 'game-shell';
+shell.dataset.view = 'menu';
 root.appendChild(shell);
 
 const header = document.createElement('header');
 header.className = 'game-header';
+const headerContent = document.createElement('div');
+headerContent.className = 'header-content';
+const headerTitleWrap = document.createElement('div');
+headerTitleWrap.className = 'header-title';
 const title = document.createElement('h1');
 title.textContent = "Domino's Portion Trainer";
 const subtitle = document.createElement('p');
 subtitle.textContent =
-  'Build each pizza order by order. Start at 0 points and see how long you can hold the streak.';
+  'Build each pizza order by order. Earn points for speed and accuracy, and chase a perfect streak.';
 const toppingsReminder = document.createElement('p');
 toppingsReminder.className = 'topping-reminder';
 toppingsReminder.textContent =
   'Remember: cheese never counts as a topping, and Gluten Free crust only comes in a 10" pizza.';
-header.append(title, subtitle, toppingsReminder);
+headerTitleWrap.append(title, subtitle, toppingsReminder);
+headerContent.append(headerTitleWrap);
+header.append(headerContent);
 shell.appendChild(header);
+
+const setView = (view: AppView) => {
+  shell.dataset.view = view;
+};
+
+const topNav = document.createElement('nav');
+topNav.className = 'top-nav';
+const navMenuButton = document.createElement('button');
+navMenuButton.type = 'button';
+navMenuButton.className = 'ghost-btn small-btn';
+navMenuButton.textContent = 'Menu';
+const navGameButton = document.createElement('button');
+navGameButton.type = 'button';
+navGameButton.className = 'ghost-btn small-btn';
+navGameButton.textContent = 'Game';
+const navLeaderboardButton = document.createElement('button');
+navLeaderboardButton.type = 'button';
+navLeaderboardButton.className = 'ghost-btn small-btn';
+navLeaderboardButton.textContent = 'Leaderboard';
+const navReferenceButton = document.createElement('button');
+navReferenceButton.type = 'button';
+navReferenceButton.className = 'ghost-btn small-btn';
+navReferenceButton.textContent = 'Reference';
+const navAboutButton = document.createElement('button');
+navAboutButton.type = 'button';
+navAboutButton.className = 'ghost-btn small-btn';
+navAboutButton.textContent = 'About';
+topNav.append(
+  navMenuButton,
+  navGameButton,
+  navLeaderboardButton,
+  navReferenceButton,
+  navAboutButton,
+);
+shell.appendChild(topNav);
+
+const menuSection = document.createElement('section');
+menuSection.className = 'menu-section';
+menuSection.dataset.view = 'menu';
+const menuHeader = document.createElement('div');
+menuHeader.className = 'menu-header';
+const menuTitleWrap = document.createElement('div');
+menuTitleWrap.className = 'menu-title';
+const menuTitle = document.createElement('h2');
+menuTitle.textContent = 'Ready to train?';
+const menuCopy = document.createElement('p');
+menuCopy.textContent =
+  'Pick a mode to jump in, review the reference sheets, or check the global leaderboard.';
+menuTitleWrap.append(menuTitle, menuCopy);
+const menuAuth = document.createElement('div');
+menuAuth.className = 'menu-auth';
+const menuAuthLabel = document.createElement('span');
+menuAuthLabel.className = 'menu-auth-label';
+menuAuthLabel.textContent = 'Account';
+const menuAuthButtons = document.createElement('div');
+menuAuthButtons.className = 'menu-auth-buttons';
+const menuAuthSignIn = document.createElement('button');
+menuAuthSignIn.type = 'button';
+menuAuthSignIn.className = 'ghost-btn small-btn';
+menuAuthSignIn.textContent = 'Sign in / Create account';
+const menuAuthSignOut = document.createElement('button');
+menuAuthSignOut.type = 'button';
+menuAuthSignOut.className = 'secondary-btn small-btn';
+menuAuthSignOut.textContent = 'Sign out';
+menuAuthButtons.append(menuAuthSignIn, menuAuthSignOut);
+const menuAuthStatus = document.createElement('span');
+menuAuthStatus.className = 'menu-auth-status';
+menuAuth.append(menuAuthLabel, menuAuthButtons, menuAuthStatus);
+menuHeader.append(menuTitleWrap);
+const menuGrid = document.createElement('div');
+menuGrid.className = 'menu-grid';
+const menuStart = document.createElement('button');
+menuStart.type = 'button';
+menuStart.className = 'primary-btn menu-card';
+menuStart.textContent = 'Start Training';
+const menuLeaderboard = document.createElement('button');
+menuLeaderboard.type = 'button';
+menuLeaderboard.className = 'secondary-btn menu-card';
+menuLeaderboard.textContent = 'View Leaderboard';
+const menuReference = document.createElement('button');
+menuReference.type = 'button';
+menuReference.className = 'ghost-btn menu-card';
+menuReference.textContent = 'Reference Sheet';
+const menuAbout = document.createElement('button');
+menuAbout.type = 'button';
+menuAbout.className = 'ghost-btn menu-card';
+menuAbout.textContent = 'How to Play';
+menuGrid.append(menuStart, menuLeaderboard, menuReference, menuAbout);
+menuSection.append(menuHeader, menuGrid);
+const menuAuthSection = document.createElement('section');
+menuAuthSection.className = 'menu-auth-section';
+menuAuthSection.dataset.view = 'menu';
+menuAuthSection.append(menuAuth);
+
+shell.append(menuAuthSection, menuSection);
 
 const scoreboard = document.createElement('section');
 scoreboard.className = 'scoreboard';
+scoreboard.dataset.view = 'game';
 
 const createScoreItem = (label: string) => {
   const wrapper = document.createElement('div');
@@ -661,27 +1033,56 @@ const createScoreItem = (label: string) => {
   return { wrapper, valueSpan };
 };
 
-const pointsItem = createScoreItem('Points');
-const bestItem = createScoreItem('Best Run');
+const pointsItem = createScoreItem('Score');
+const bestItem = createScoreItem('Best Streak');
 const ordersItem = createScoreItem('Orders Checked');
 scoreboard.append(pointsItem.wrapper, bestItem.wrapper, ordersItem.wrapper);
 shell.appendChild(scoreboard);
 
 const summarySection = document.createElement('section');
 summarySection.className = 'order-summary';
+summarySection.dataset.view = 'game';
 const summaryTitle = document.createElement('h2');
 summaryTitle.textContent = 'Build this order';
 const specialToggle = document.createElement('button');
 specialToggle.type = 'button';
 specialToggle.className = 'toggle-btn';
 specialToggle.textContent = 'Special requests: On';
+const orderMeta = document.createElement('div');
+orderMeta.className = 'order-meta';
+
+const createMetaItem = (label: string) => {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'meta-item';
+  const labelEl = document.createElement('span');
+  labelEl.className = 'meta-label';
+  labelEl.textContent = label;
+  const valueEl = document.createElement('span');
+  valueEl.className = 'meta-value';
+  wrapper.append(labelEl, valueEl);
+  return { wrapper, valueEl };
+};
+
+const metaOrder = createMetaItem('Order');
+const metaSize = createMetaItem('Size');
+const metaCrust = createMetaItem('Crust / Recipe');
+const metaToppings = createMetaItem('Toppings');
+const metaRequest = createMetaItem('Request');
+orderMeta.append(
+  metaOrder.wrapper,
+  metaSize.wrapper,
+  metaCrust.wrapper,
+  metaToppings.wrapper,
+  metaRequest.wrapper,
+);
 const summaryList = document.createElement('ol');
 summaryList.className = 'order-steps';
-summarySection.append(summaryTitle, specialToggle, summaryList);
+summarySection.append(summaryTitle, specialToggle, orderMeta, summaryList);
 shell.appendChild(summarySection);
 
 const card = document.createElement('section');
 card.className = 'card';
+card.dataset.view = 'game';
 
 const inputHeader = document.createElement('h3');
 inputHeader.className = 'field-title';
@@ -718,8 +1119,80 @@ feedbackEl.textContent = 'Enter every amount and lock it in to score points.';
 card.append(inputHeader, fieldGrid, buttonRow, feedbackEl);
 shell.appendChild(card);
 
+const leaderboardSection = document.createElement('section');
+leaderboardSection.className = 'leaderboard';
+leaderboardSection.dataset.view = 'leaderboard';
+const leaderboardHeader = document.createElement('div');
+leaderboardHeader.className = 'leaderboard-header';
+const leaderboardTitle = document.createElement('h3');
+leaderboardTitle.textContent = 'Leaderboard';
+const leaderboardSubtitle = document.createElement('p');
+leaderboardSubtitle.textContent = 'Top scores from the global board.';
+leaderboardHeader.append(leaderboardTitle, leaderboardSubtitle);
+
+const authSection = document.createElement('div');
+authSection.className = 'auth-section';
+const authTitle = document.createElement('h4');
+authTitle.textContent = 'Sign in or create an account to submit scores';
+const authActions = document.createElement('div');
+authActions.className = 'auth-actions';
+const authGoogle = document.createElement('button');
+authGoogle.type = 'button';
+authGoogle.className = 'ghost-btn small-btn';
+authGoogle.textContent = 'Google';
+const authSignOut = document.createElement('button');
+authSignOut.type = 'button';
+authSignOut.className = 'secondary-btn small-btn';
+authSignOut.textContent = 'Sign out';
+authActions.append(authGoogle, authSignOut);
+const authStatus = document.createElement('p');
+authStatus.className = 'leaderboard-status';
+authSection.append(authTitle, authActions, authStatus);
+
+const nameBlock = document.createElement('div');
+nameBlock.className = 'leaderboard-name';
+const nameLabel = document.createElement('label');
+nameLabel.textContent = 'Display name';
+nameLabel.htmlFor = 'player-name';
+const nameInput = document.createElement('input');
+nameInput.id = 'player-name';
+nameInput.type = 'text';
+nameInput.maxLength = NAME_MAX_LENGTH;
+nameInput.placeholder = 'Enter name';
+const nameActions = document.createElement('div');
+nameActions.className = 'leaderboard-actions';
+const saveNameButton = document.createElement('button');
+saveNameButton.type = 'button';
+saveNameButton.className = 'primary-btn small-btn';
+saveNameButton.textContent = 'Save name';
+const editNameButton = document.createElement('button');
+editNameButton.type = 'button';
+editNameButton.className = 'ghost-btn small-btn';
+editNameButton.textContent = 'Change';
+nameActions.append(saveNameButton, editNameButton);
+nameBlock.append(nameLabel, nameInput, nameActions);
+
+const leaderboardStatus = document.createElement('p');
+leaderboardStatus.className = 'leaderboard-status';
+leaderboardStatus.textContent = supabase
+  ? 'Sign in to submit scores, then save a display name.'
+  : 'Add Supabase keys to enable the global leaderboard.';
+
+const leaderboardList = document.createElement('div');
+leaderboardList.className = 'leaderboard-list';
+
+leaderboardSection.append(
+  leaderboardHeader,
+  authSection,
+  nameBlock,
+  leaderboardStatus,
+  leaderboardList,
+);
+shell.appendChild(leaderboardSection);
+
 const cheatSection = document.createElement('section');
 cheatSection.className = 'cheat-section';
+cheatSection.dataset.view = 'reference';
 const cheatDetails = document.createElement('details');
 const cheatSummary = document.createElement('summary');
 cheatSummary.textContent = 'Need the charts? Peek at the reference sheet.';
@@ -729,10 +1202,51 @@ cheatDetails.append(cheatSummary, cheatGrid);
 cheatSection.appendChild(cheatDetails);
 shell.appendChild(cheatSection);
 
+const aboutSection = document.createElement('section');
+aboutSection.className = 'about-section';
+aboutSection.dataset.view = 'about';
+const aboutTitle = document.createElement('h3');
+aboutTitle.textContent = 'How to play';
+const aboutText = document.createElement('p');
+aboutText.textContent =
+  'Start a round, read the order summary, and enter the correct portion amounts. ' +
+  'You earn more points for speed and perfect streaks. Use the reference sheet to study.';
+const aboutList = document.createElement('ul');
+aboutList.className = 'about-list';
+const aboutItems = [
+  'Check answers to score points and keep your streak.',
+  'Use the special request toggle to practice modifiers.',
+  'Leaderboard syncs when you save a display name.',
+];
+aboutItems.forEach((text) => {
+  const item = document.createElement('li');
+  item.textContent = text;
+  aboutList.appendChild(item);
+});
+const installTitle = document.createElement('h3');
+installTitle.textContent = 'Install on your phone';
+const installText = document.createElement('p');
+installText.textContent =
+  'Open this site on your phone and add it to your home screen for a full-screen app experience.';
+const installList = document.createElement('ul');
+installList.className = 'about-list';
+const installItems = [
+  'iPhone (Safari): Share button > Add to Home Screen.',
+  'Android (Chrome): Menu > Add to Home screen.',
+];
+installItems.forEach((text) => {
+  const item = document.createElement('li');
+  item.textContent = text;
+  installList.appendChild(item);
+});
+aboutSection.append(aboutTitle, aboutText, aboutList);
+aboutSection.append(installTitle, installText, installList);
+shell.appendChild(aboutSection);
+
 const referenceGroups = new Map<string, { label: string; crust: string; records: PortionRecord[] }>();
 portionRecords.forEach((record) => {
-  const label = `${record.item}${record.detail ? ` – ${record.detail}` : ''}${
-    record.toppingLabel ? ` – ${record.toppingLabel}` : ''
+  const label = `${record.item}${record.detail ? ` - ${record.detail}` : ''}${
+    record.toppingLabel ? ` - ${record.toppingLabel}` : ''
   }`;
   const key = `${record.crust}|${label}`;
   if (!referenceGroups.has(key)) {
@@ -773,7 +1287,7 @@ Array.from(referenceGroups.values())
     group.records.sort((a, b) => sizeToNumber(a.size) - sizeToNumber(b.size));
     const values = group.records
       .map((record) => `${record.size}: ${formatAmount(record.amount)} ${record.unit ?? 'oz'}`)
-      .join(' • ');
+      .join(' * ');
     appendCheatRow(group.label, group.crust, values);
   });
 
@@ -781,16 +1295,42 @@ TOPPING_CATEGORIES.forEach((category) => {
   (['single', 'twoThree', 'fourPlus'] as ToppingBandKey[]).forEach((bandKey) => {
     const values = TOPPING_PORTION_SIZES.map(
       (size) => `${size}: ${formatAmount(category.ounces[bandKey][size])} oz`,
-    ).join(' • ');
-    appendCheatRow(`${category.name} – ${TOPPING_BAND_LABEL[bandKey]}`, 'Topping portions', values);
+    ).join(' * ');
+    appendCheatRow(`${category.name} - ${TOPPING_BAND_LABEL[bandKey]}`, 'Topping portions', values);
   });
 });
 
-const score = { points: 0, best: 0, answered: 0 };
-let currentOrder: PizzaOrder | null = null;
+const score = { points: 0, streak: 0, best: 0, answered: 0 };
+let currentOrder: GameOrder | null = null;
 let currentFields: QuizField[] = [];
 let answered = false;
 let specialRequestsEnabled = true;
+let orderStartedAt = 0;
+let currentUser: User | null = null;
+
+const goToGame = () => {
+  if (!currentOrder) {
+    loadNextOrder();
+  }
+  setView('game');
+};
+
+const goToLeaderboard = () => {
+  setView('leaderboard');
+};
+
+const goToReference = () => {
+  setView('reference');
+};
+
+const goToAbout = () => {
+  setView('about');
+};
+
+const startGame = () => {
+  loadNextOrder();
+  setView('game');
+};
 
 const updateScoreboard = () => {
   pointsItem.valueSpan.textContent = String(score.points);
@@ -798,14 +1338,263 @@ const updateScoreboard = () => {
   ordersItem.valueSpan.textContent = String(score.answered);
 };
 
+type LeaderboardEntry = {
+  display_name: string;
+  best_score: number;
+  best_streak: number;
+};
+
+const setNameEditing = (isEditing: boolean) => {
+  const hasAuth = Boolean(currentUser);
+  nameInput.disabled = !isEditing || !hasAuth;
+  saveNameButton.disabled = !isEditing || !hasAuth;
+  editNameButton.disabled = isEditing || !hasAuth;
+  if (isEditing) {
+    nameInput.focus();
+  }
+};
+
+const setAuthButtonsEnabled = (enabled: boolean) => {
+  authGoogle.disabled = !enabled;
+  menuAuthSignIn.disabled = !enabled;
+};
+
+const updateAuthUI = (user: User | null) => {
+  currentUser = user;
+  const hasAuth = Boolean(user);
+  authSignOut.disabled = !hasAuth;
+  menuAuthSignOut.disabled = !hasAuth;
+  setAuthButtonsEnabled(!hasAuth && Boolean(supabase));
+  menuAuthSignIn.hidden = hasAuth;
+  menuAuthSignOut.hidden = !hasAuth;
+
+  if (!supabase) {
+    authStatus.textContent = 'Add Supabase keys to enable sign in.';
+    menuAuthStatus.textContent = 'Supabase keys required';
+  } else if (hasAuth) {
+    const display = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? user?.email ?? 'Signed in';
+    authStatus.textContent = `Signed in as ${display}.`;
+    menuAuthStatus.textContent = display;
+  } else {
+    authStatus.textContent = 'Sign in to submit scores to the global leaderboard.';
+    menuAuthStatus.textContent = 'Not signed in';
+  }
+
+  if (hasAuth) {
+    const savedName = loadName();
+    if (!savedName) {
+      const candidate =
+        user?.user_metadata?.full_name ??
+        user?.user_metadata?.name ??
+        user?.user_metadata?.preferred_username ??
+        user?.email ??
+        '';
+      if (candidate) {
+        nameInput.value = candidate;
+        localStorage.setItem(PLAYER_NAME_KEY, candidate);
+      }
+    }
+  }
+
+  if (!hasAuth) {
+    setNameEditing(false);
+  } else {
+    const savedName = loadName();
+    if (savedName) {
+      nameInput.value = savedName;
+      setNameEditing(false);
+    } else {
+      setNameEditing(true);
+    }
+  }
+};
+
+const renderLeaderboard = (entries: LeaderboardEntry[]) => {
+  leaderboardList.innerHTML = '';
+  if (entries.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'leaderboard-empty';
+    empty.textContent = 'No scores yet.';
+    leaderboardList.appendChild(empty);
+    return;
+  }
+
+  const header = document.createElement('div');
+  header.className = 'leaderboard-row is-header';
+  const headerRank = document.createElement('span');
+  headerRank.className = 'leaderboard-rank';
+  headerRank.textContent = '#';
+  const headerName = document.createElement('span');
+  headerName.className = 'leaderboard-player';
+  headerName.textContent = 'Player';
+  const headerScore = document.createElement('span');
+  headerScore.className = 'leaderboard-score';
+  headerScore.textContent = 'Score';
+  const headerStreak = document.createElement('span');
+  headerStreak.className = 'leaderboard-streak';
+  headerStreak.textContent = 'Streak';
+  header.append(headerRank, headerName, headerScore, headerStreak);
+  leaderboardList.appendChild(header);
+
+  entries.forEach((entry, index) => {
+    const row = document.createElement('div');
+    row.className = 'leaderboard-row';
+    const rank = document.createElement('span');
+    rank.className = 'leaderboard-rank';
+    rank.textContent = `#${index + 1}`;
+    const name = document.createElement('span');
+    name.className = 'leaderboard-player';
+    name.textContent = entry.display_name;
+    const scoreValue = document.createElement('span');
+    scoreValue.className = 'leaderboard-score';
+    scoreValue.textContent = `${entry.best_score}`;
+    const streakValue = document.createElement('span');
+    streakValue.className = 'leaderboard-streak';
+    streakValue.textContent = `${entry.best_streak}`;
+    row.append(rank, name, scoreValue, streakValue);
+    leaderboardList.appendChild(row);
+  });
+};
+
+const loadLeaderboard = async () => {
+  if (!supabase) {
+    return;
+  }
+  const { data, error } = await supabase
+    .from(LEADERBOARD_TABLE)
+    .select('display_name,best_score,best_streak')
+    .order('best_score', { ascending: false })
+    .order('best_streak', { ascending: false })
+    .order('updated_at', { ascending: true })
+    .limit(LEADERBOARD_LIMIT);
+
+  if (error) {
+    console.error(error);
+    leaderboardStatus.textContent = 'Leaderboard unavailable. Try again later.';
+    return;
+  }
+
+  renderLeaderboard(data ?? []);
+};
+
+const submitLeaderboard = async (bestScore: number, bestStreak: number) => {
+  if (!supabase) {
+    leaderboardStatus.textContent = 'Add Supabase keys to enable the global leaderboard.';
+    return;
+  }
+  if (!currentUser) {
+    leaderboardStatus.textContent = 'Sign in to submit your score.';
+    return;
+  }
+  const displayName = loadName();
+  if (!displayName) {
+    return;
+  }
+  const normalized = normalizeName(displayName);
+  const { error } = await supabase
+    .from(LEADERBOARD_TABLE)
+    .upsert(
+      {
+        user_id: currentUser.id,
+        display_name: displayName,
+        name_normalized: normalized,
+        best_score: bestScore,
+        best_streak: bestStreak,
+      },
+      { onConflict: 'user_id' },
+    );
+
+  if (error) {
+    console.error(error);
+    leaderboardStatus.textContent = 'Score could not be submitted.';
+    return;
+  }
+
+  leaderboardStatus.textContent = 'Leaderboard updated.';
+  await loadLeaderboard();
+};
+
+const maybeSubmitLeaderboard = async () => {
+  const displayName = loadName();
+  if (!displayName) {
+    return;
+  }
+  const previousBestScore = loadNumber(BEST_SCORE_KEY);
+  const previousBestStreak = loadNumber(BEST_STREAK_KEY);
+  const nextBestScore = Math.max(previousBestScore, score.points);
+  const nextBestStreak = Math.max(previousBestStreak, score.best);
+  if (nextBestScore === previousBestScore && nextBestStreak === previousBestStreak) {
+    return;
+  }
+  localStorage.setItem(BEST_SCORE_KEY, String(nextBestScore));
+  localStorage.setItem(BEST_STREAK_KEY, String(nextBestStreak));
+  await submitLeaderboard(nextBestScore, nextBestStreak);
+};
+
 const updateSpecialToggle = () => {
   specialToggle.textContent = `Special requests: ${specialRequestsEnabled ? 'On' : 'Off'}`;
   specialToggle.classList.toggle('is-off', !specialRequestsEnabled);
 };
 
+const registerServiceWorker = () => {
+  if (!('serviceWorker' in navigator)) {
+    return;
+  }
+  if (import.meta.env.DEV) {
+    return;
+  }
+  if (!location.protocol.startsWith('http')) {
+    return;
+  }
+  const baseUrl = import.meta.env.BASE_URL ?? '/';
+  navigator.serviceWorker.register(`${baseUrl}sw.js`).catch((error) => {
+    console.warn('Service worker registration failed', error);
+  });
+};
+
 const setFeedback = (message: string, tone: 'neutral' | 'correct' | 'wrong') => {
   feedbackEl.className = `feedback ${tone === 'correct' ? 'is-correct' : tone === 'wrong' ? 'is-wrong' : 'is-neutral'}`;
   feedbackEl.textContent = message;
+};
+
+const applySavedName = () => {
+  const savedName = loadName();
+  if (savedName) {
+    nameInput.value = savedName;
+    if (currentUser) {
+      setNameEditing(false);
+    }
+  } else {
+    if (currentUser) {
+      setNameEditing(true);
+    }
+  }
+};
+
+const handleSaveName = async () => {
+  if (!currentUser) {
+    leaderboardStatus.textContent = 'Sign in before saving a name.';
+    return;
+  }
+  const errorMessage = validatePlayerName(nameInput.value);
+  if (errorMessage) {
+    leaderboardStatus.textContent = errorMessage;
+    return;
+  }
+  const displayName = nameInput.value.trim();
+  localStorage.setItem(PLAYER_NAME_KEY, displayName);
+  setNameEditing(false);
+  leaderboardStatus.textContent = 'Name saved. Best scores will sync.';
+  await maybeSubmitLeaderboard();
+};
+
+const handleEditName = () => {
+  if (!currentUser) {
+    leaderboardStatus.textContent = 'Sign in before editing your name.';
+    return;
+  }
+  setNameEditing(true);
+  leaderboardStatus.textContent = 'Update your name and save.';
 };
 
 const describeToppings = (order: PizzaOrder) => {
@@ -815,8 +1604,36 @@ const describeToppings = (order: PizzaOrder) => {
   return `${order.toppings.length} topping${order.toppings.length > 1 ? 's' : ''}: ${order.toppings.join(', ')}.`;
 };
 
-const renderSummary = (order: PizzaOrder) => {
+const renderSummary = (order: GameOrder) => {
   summaryList.innerHTML = '';
+  metaOrder.valueEl.textContent = `#${score.answered + 1}`;
+  if (order.kind === 'Pasta') {
+    metaSize.valueEl.textContent = order.size;
+    metaCrust.valueEl.textContent = order.recipe;
+    metaToppings.valueEl.textContent = 'Pasta';
+    metaRequest.valueEl.textContent = 'Standard';
+
+    const dishItem = document.createElement('li');
+    dishItem.innerHTML = `<span class="step">1. Dish</span><strong>${order.recipe}</strong>`;
+
+    const sizeItem = document.createElement('li');
+    sizeItem.innerHTML = `<span class="step">2. Size</span><strong>${order.size}</strong>`;
+
+    const notesItem = document.createElement('li');
+    notesItem.innerHTML =
+      '<span class="step">3. Notes</span><strong>Tin-only portions</strong><p class="modifier-note">Follow the pasta chart portions for each ingredient.</p>';
+
+    summaryList.append(dishItem, sizeItem, notesItem);
+    return;
+  }
+
+  metaSize.valueEl.textContent = order.size;
+  metaCrust.valueEl.textContent = order.crust;
+  metaToppings.valueEl.textContent =
+    order.toppings.length === 0
+      ? 'Cheese only'
+      : `${order.toppings.length} topping${order.toppings.length > 1 ? 's' : ''}`;
+  metaRequest.valueEl.textContent = order.modifier.label;
   const sizeItem = document.createElement('li');
   sizeItem.innerHTML = `<span class="step">1. Size</span><strong>${order.size}</strong>`;
 
@@ -827,21 +1644,37 @@ const renderSummary = (order: PizzaOrder) => {
   toppingItem.className = 'topping-step';
   const toppingTitle = document.createElement('span');
   toppingTitle.className = 'step';
-  toppingTitle.textContent = '3. Toppings';
+  toppingTitle.textContent = '4. Toppings';
   const toppingText = document.createElement('div');
   toppingText.className = 'topping-list';
   toppingText.textContent = describeToppings(order);
   toppingItem.append(toppingTitle, toppingText);
 
   const modifierItem = document.createElement('li');
-  modifierItem.innerHTML = `<span class="step">4. Special request</span><strong>${order.modifier.label}</strong><p class="modifier-note">${order.modifier.description}</p>`;
+  modifierItem.innerHTML = `<span class="step">3. Special request</span><strong>${order.modifier.label}</strong><p class="modifier-note">${order.modifier.description}</p>`;
 
-  summaryList.append(sizeItem, crustItem, toppingItem, modifierItem);
+  summaryList.append(sizeItem, crustItem, modifierItem, toppingItem);
+};
+
+const getModifierNote = (record: PortionRecord, modifier: OrderModifier | null) => {
+  if (!modifier || modifier.multiplier === 1) {
+    return null;
+  }
+  if (modifier.target === 'sauce' && record.category === 'Sauce') {
+    return `Adjusted for ${modifier.label}.`;
+  }
+  if (modifier.target === 'pizza-cheese' && record.item === 'Pizza Cheese') {
+    return `Adjusted for ${modifier.label}.`;
+  }
+  if (modifier.target === 'provolone' && /provolone/i.test(record.item)) {
+    return `Adjusted for ${modifier.label}.`;
+  }
+  return null;
 };
 
 const createFieldRow = (
   record: PortionRecord,
-  modifier: OrderModifier,
+  modifier: OrderModifier | null,
 ): QuizField => {
   const container = document.createElement('div');
   container.className = 'field-row';
@@ -849,17 +1682,39 @@ const createFieldRow = (
   label.textContent = `${record.item}${record.detail ? ` (${record.detail})` : ''}`;
   const hint = document.createElement('span');
   hint.className = 'field-hint';
-  const extra = record.toppingLabel ? ` • ${record.toppingLabel}` : '';
-  hint.textContent = `${record.size} • ${record.crust}${extra}`;
+  const extra = record.toppingLabel ? ` * ${record.toppingLabel}` : '';
+  hint.textContent = `${record.size} * ${record.crust}${extra}`;
   const input = document.createElement('input');
   input.type = 'number';
   input.step = '0.1';
   input.inputMode = 'decimal';
-  input.placeholder = 'Ounces';
+  input.placeholder = record.unit && record.unit !== 'oz' ? `Amount (${record.unit})` : 'Ounces';
   const expected = applyModifier(record, modifier);
   const result = document.createElement('span');
   result.className = 'field-result';
-  container.append(label, hint, input, result);
+
+  const modifierNote = getModifierNote(record, modifier);
+  const metaPieces: HTMLElement[] = [];
+  if (record.note) {
+    const note = document.createElement('span');
+    note.className = 'field-note';
+    note.textContent = record.note;
+    metaPieces.push(note);
+  }
+  if (modifierNote) {
+    const modifierSpan = document.createElement('span');
+    modifierSpan.className = 'field-modifier';
+    modifierSpan.textContent = modifierNote;
+    metaPieces.push(modifierSpan);
+  }
+  if (metaPieces.length > 0) {
+    const meta = document.createElement('div');
+    meta.className = 'field-meta';
+    meta.append(...metaPieces);
+    container.append(label, hint, input, meta, result);
+  } else {
+    container.append(label, hint, input, result);
+  }
   return {
     id: record.id,
     expected,
@@ -872,9 +1727,18 @@ const createFieldRow = (
   };
 };
 
-const buildFields = (order: PizzaOrder) => {
+const buildFields = (order: GameOrder) => {
   fieldGrid.innerHTML = '';
   currentFields = [];
+  if (order.kind === 'Pasta') {
+    order.records.forEach((record) => {
+      const field = createFieldRow(record, null);
+      currentFields.push(field);
+      fieldGrid.appendChild(field.container);
+    });
+    return;
+  }
+
   const recordsToRender: PortionRecord[] = [order.sauce];
 
   if (order.dataCrust === 'New York Style') {
@@ -925,6 +1789,7 @@ const buildFields = (order: PizzaOrder) => {
 const loadNextOrder = () => {
   currentOrder = generateOrder(specialRequestsEnabled);
   answered = false;
+  orderStartedAt = performance.now();
   renderSummary(currentOrder);
   buildFields(currentOrder);
   setFeedback('Enter every amount and lock it in to score points.', 'neutral');
@@ -934,6 +1799,22 @@ const loadNextOrder = () => {
 };
 
 const tolerance = 0.05;
+const POINTS_PER_CORRECT = 8;
+const POINTS_PER_WRONG = 4;
+const MAX_SPEED_BONUS = 20;
+const FAST_TIME_SECONDS = 20;
+const SLOW_TIME_SECONDS = 90;
+
+const getSpeedBonus = (elapsedSeconds: number) => {
+  if (elapsedSeconds <= FAST_TIME_SECONDS) {
+    return MAX_SPEED_BONUS;
+  }
+  if (elapsedSeconds >= SLOW_TIME_SECONDS) {
+    return 0;
+  }
+  const progress = (elapsedSeconds - FAST_TIME_SECONDS) / (SLOW_TIME_SECONDS - FAST_TIME_SECONDS);
+  return Math.round(MAX_SPEED_BONUS * (1 - progress));
+};
 
 const handleCheck = () => {
   if (!currentOrder || answered) {
@@ -941,6 +1822,7 @@ const handleCheck = () => {
   }
   let missing = false;
   let incorrectCount = 0;
+  let correctCount = 0;
   currentFields.forEach((field) => {
     const container = field.container;
     container.classList.remove('is-correct', 'is-wrong');
@@ -953,6 +1835,7 @@ const handleCheck = () => {
     }
     if (Math.abs(value - field.expected) <= tolerance) {
       container.classList.add('is-correct');
+      correctCount += 1;
     } else {
       incorrectCount += 1;
       container.classList.add('is-wrong');
@@ -966,14 +1849,25 @@ const handleCheck = () => {
   }
 
   score.answered += 1;
+  const elapsedSeconds = (performance.now() - orderStartedAt) / 1000;
+  const speedBonus = getSpeedBonus(elapsedSeconds);
+  const basePoints = correctCount * POINTS_PER_CORRECT - incorrectCount * POINTS_PER_WRONG;
+  const earnedPoints = Math.max(0, basePoints + speedBonus);
+  score.points += earnedPoints;
 
   if (incorrectCount === 0) {
-    score.points += 1;
-    score.best = Math.max(score.best, score.points);
-    setFeedback('Perfect! All portions match the chart.', 'correct');
+    score.streak += 1;
+    score.best = Math.max(score.best, score.streak);
+    setFeedback(
+      `Perfect! +${earnedPoints} points (${speedBonus} speed bonus).`,
+      'correct',
+    );
   } else {
-    score.points = 0;
-    setFeedback('Something was off — review the highlighted fields and try the next order.', 'wrong');
+    score.streak = 0;
+    setFeedback(
+      `+${earnedPoints} points (${correctCount} correct, ${incorrectCount} wrong, ${speedBonus} speed bonus).`,
+      'wrong',
+    );
   }
 
   answered = true;
@@ -981,6 +1875,7 @@ const handleCheck = () => {
   revealButton.disabled = true;
   nextButton.disabled = false;
   updateScoreboard();
+  void maybeSubmitLeaderboard();
 };
 
 const handleReveal = () => {
@@ -1000,9 +1895,58 @@ const handleReveal = () => {
   nextButton.disabled = false;
 };
 
+const signInWithProvider = async (provider: 'google') => {
+  if (!supabase) {
+    authStatus.textContent = 'Add Supabase keys to enable sign in.';
+    return;
+  }
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: getRedirectUrl(),
+    },
+  });
+  if (error) {
+    console.error(error);
+    authStatus.textContent = 'Sign in failed. Please try again.';
+  }
+};
+
+const handleSignOut = async () => {
+  if (!supabase) {
+    return;
+  }
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error(error);
+    authStatus.textContent = 'Sign out failed.';
+  }
+};
+
 checkButton.addEventListener('click', handleCheck);
 revealButton.addEventListener('click', handleReveal);
 nextButton.addEventListener('click', loadNextOrder);
+saveNameButton.addEventListener('click', handleSaveName);
+editNameButton.addEventListener('click', handleEditName);
+authGoogle.addEventListener('click', () => signInWithProvider('google'));
+authSignOut.addEventListener('click', handleSignOut);
+menuAuthSignIn.addEventListener('click', () => signInWithProvider('google'));
+menuAuthSignOut.addEventListener('click', handleSignOut);
+navMenuButton.addEventListener('click', () => setView('menu'));
+navGameButton.addEventListener('click', goToGame);
+navLeaderboardButton.addEventListener('click', goToLeaderboard);
+navReferenceButton.addEventListener('click', goToReference);
+navAboutButton.addEventListener('click', goToAbout);
+menuStart.addEventListener('click', startGame);
+menuLeaderboard.addEventListener('click', goToLeaderboard);
+menuReference.addEventListener('click', goToReference);
+menuAbout.addEventListener('click', goToAbout);
+nameInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    handleSaveName();
+  }
+});
 specialToggle.addEventListener('click', () => {
   specialRequestsEnabled = !specialRequestsEnabled;
   updateSpecialToggle();
@@ -1011,4 +1955,20 @@ specialToggle.addEventListener('click', () => {
 
 updateScoreboard();
 updateSpecialToggle();
-loadNextOrder();
+loadLeaderboard();
+if (supabase) {
+  supabase.auth.getSession().then(({ data }) => {
+    updateAuthUI(data.session?.user ?? null);
+  }).catch((error) => {
+    console.error(error);
+    updateAuthUI(null);
+  });
+  supabase.auth.onAuthStateChange((_event, session) => {
+    updateAuthUI(session?.user ?? null);
+  });
+} else {
+  updateAuthUI(null);
+}
+applySavedName();
+setView('menu');
+registerServiceWorker();

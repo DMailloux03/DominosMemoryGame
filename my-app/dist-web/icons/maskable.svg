@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0b1024" />
+  <circle cx="256" cy="256" r="190" fill="#ffd45e" opacity="0.2" />
+  <circle cx="256" cy="256" r="150" fill="#ff9b3c" opacity="0.25" />
+  <g fill="#f7f9ff">
+    <path d="M152 200h208v26H152z" />
+    <path d="M152 252h156v26H152z" />
+    <path d="M152 304h208v26H152z" />
+  </g>
+  <text x="256" y="168" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="30" fill="#f7f9ff">
+    Domino's
+  </text>
+  <text x="256" y="372" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="30" fill="#f7f9ff">
+    Trainer
+  </text>
+</svg>

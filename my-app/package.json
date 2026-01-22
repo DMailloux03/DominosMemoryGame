@@ -9,7 +9,10 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "dev:web": "vite --config vite.web.config.ts",
+    "build:web": "vite build --config vite.web.config.ts",
+    "preview:web": "vite preview --config vite.web.config.ts"
   },
   "keywords": [],
   "author": {
@@ -37,6 +40,7 @@
     "vite": "^5.4.21"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
     "electron-squirrel-startup": "^1.0.1"
   }
 }
