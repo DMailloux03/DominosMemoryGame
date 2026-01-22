@@ -34,6 +34,7 @@ type PizzaOrder = {
   cheeses: PortionRecord[];
   toppingRecords: PortionRecord[];
   modifier: OrderModifier;
+  specialtyName?: string;
 };
 
 type PastaOrder = {
@@ -45,7 +46,7 @@ type PastaOrder = {
 
 type GameOrder = PizzaOrder | PastaOrder;
 
-type AppView = 'menu' | 'game' | 'leaderboard' | 'reference' | 'about';
+type AppView = 'menu' | 'game' | 'leaderboard' | 'reference' | 'about' | 'finish';
 
 type QuizField = {
   id: string;
@@ -196,6 +197,7 @@ const BANNED_WORDS = [
   'cunt',
 ];
 const LEADERBOARD_LIMIT = 10;
+const MAX_ORDERS = 20;
 
 const randomItem = <T,>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
 
@@ -1034,12 +1036,14 @@ const createMetaItem = (label: string) => {
 };
 
 const metaOrder = createMetaItem('Order');
+const metaFullName = createMetaItem('Full name');
 const metaSize = createMetaItem('Size');
 const metaCrust = createMetaItem('Crust / Recipe');
 const metaToppings = createMetaItem('Toppings');
 const metaRequest = createMetaItem('Request');
 orderMeta.append(
   metaOrder.wrapper,
+  metaFullName.wrapper,
   metaSize.wrapper,
   metaCrust.wrapper,
   metaToppings.wrapper,
@@ -1192,6 +1196,27 @@ aboutSection.append(aboutTitle, aboutText, aboutList);
 aboutSection.append(installTitle, installText, installList);
 shell.appendChild(aboutSection);
 
+const finishSection = document.createElement('section');
+finishSection.className = 'finish-section';
+finishSection.dataset.view = 'finish';
+const finishTitle = document.createElement('h2');
+finishTitle.textContent = 'Game complete';
+const finishSummary = document.createElement('p');
+finishSummary.className = 'finish-summary';
+const finishStats = document.createElement('div');
+finishStats.className = 'finish-stats';
+const finishScore = createScoreItem('Final Score');
+const finishBest = createScoreItem('Best Streak');
+const finishOrders = createScoreItem('Orders Checked');
+finishStats.append(finishScore.wrapper, finishBest.wrapper, finishOrders.wrapper);
+const finishActions = document.createElement('div');
+finishActions.className = 'button-row';
+const finishRestart = createButton('Play again', 'primary-btn');
+const finishLeaderboard = createButton('View Leaderboard', 'secondary-btn');
+finishActions.append(finishRestart, finishLeaderboard);
+finishSection.append(finishTitle, finishSummary, finishStats, finishActions);
+shell.appendChild(finishSection);
+
 const referenceGroups = new Map<string, { label: string; crust: string; records: PortionRecord[] }>();
 portionRecords.forEach((record) => {
   const label = `${record.item}${record.detail ? ` - ${record.detail}` : ''}${
@@ -1277,6 +1302,11 @@ const goToAbout = () => {
 };
 
 const startGame = () => {
+  score.points = 0;
+  score.streak = 0;
+  score.best = 0;
+  score.answered = 0;
+  updateScoreboard();
   loadNextOrder();
   setView('game');
 };
@@ -1560,6 +1590,7 @@ const renderSummary = (order: GameOrder) => {
   summaryList.innerHTML = '';
   metaOrder.valueEl.textContent = `#${score.answered + 1}`;
   if (order.kind === 'Pasta') {
+    metaFullName.valueEl.textContent = `${order.recipe} - ${order.size}`;
     metaSize.valueEl.textContent = order.size;
     metaCrust.valueEl.textContent = order.recipe;
     metaToppings.valueEl.textContent = 'Pasta';
@@ -1586,6 +1617,15 @@ const renderSummary = (order: GameOrder) => {
       ? 'Cheese only'
       : `${order.toppings.length} topping${order.toppings.length > 1 ? 's' : ''}`;
   metaRequest.valueEl.textContent = order.modifier.label;
+  const toppingDesc =
+    order.toppings.length === 0
+      ? 'Cheese only'
+      : `${order.toppings.length} topping${order.toppings.length > 1 ? 's' : ''}`;
+  if (order.specialtyName) {
+    metaFullName.valueEl.textContent = `${order.size} ${order.specialtyName} ${order.crust}`;
+  } else {
+    metaFullName.valueEl.textContent = `${order.size} ${order.crust} - ${toppingDesc}`;
+  }
   const sizeItem = document.createElement('li');
   sizeItem.innerHTML = `<span class="step">1. Size</span><strong>${order.size}</strong>`;
 
@@ -1739,6 +1779,15 @@ const buildFields = (order: GameOrder) => {
 };
 
 const loadNextOrder = () => {
+  if (score.answered >= MAX_ORDERS) {
+    finishSummary.textContent =
+      `You finished ${MAX_ORDERS} orders. Final score: ${score.points}.`;
+    finishScore.valueSpan.textContent = String(score.points);
+    finishBest.valueSpan.textContent = String(score.best);
+    finishOrders.valueSpan.textContent = String(score.answered);
+    setView('finish');
+    return;
+  }
   currentOrder = generateOrder(specialRequestsEnabled);
   answered = false;
   orderStartedAt = performance.now();
@@ -1828,6 +1877,14 @@ const handleCheck = () => {
   nextButton.disabled = false;
   updateScoreboard();
   void maybeSubmitLeaderboard();
+  if (score.answered >= MAX_ORDERS) {
+    finishSummary.textContent =
+      `You finished ${MAX_ORDERS} orders. Final score: ${score.points}.`;
+    finishScore.valueSpan.textContent = String(score.points);
+    finishBest.valueSpan.textContent = String(score.best);
+    finishOrders.valueSpan.textContent = String(score.answered);
+    setView('finish');
+  }
 };
 
 const handleReveal = () => {
@@ -1871,7 +1928,12 @@ const handleSignOut = async () => {
   const { error } = await supabase.auth.signOut();
   if (error) {
     console.error(error);
-    authStatus.textContent = 'Sign out failed.';
+    authStatus.textContent = 'Sign out failed. Clearing local session...';
+    localStorage.removeItem(PLAYER_NAME_KEY);
+    localStorage.removeItem(BEST_SCORE_KEY);
+    localStorage.removeItem(BEST_STREAK_KEY);
+    updateAuthUI(null);
+    leaderboardStatus.textContent = 'Signed out locally.';
   }
 };
 
@@ -1893,6 +1955,8 @@ menuStart.addEventListener('click', startGame);
 menuLeaderboard.addEventListener('click', goToLeaderboard);
 menuReference.addEventListener('click', goToReference);
 menuAbout.addEventListener('click', goToAbout);
+finishRestart.addEventListener('click', startGame);
+finishLeaderboard.addEventListener('click', goToLeaderboard);
 nameInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
