@@ -8,7 +8,7 @@ Build the web version:
 cd my-app
 npm run build:web
 ```
-
+  
 The static files land in `my-app/dist-web`. You can host that folder on any static host.
 
 Install on a phone:
@@ -16,7 +16,7 @@ Install on a phone:
 - iOS: open the site in Safari, tap Share, then "Add to Home Screen".
 
 ## GitHub Pages deploy
-This repo includes a GitHub Actions workflow that builds and deploys `my-app/dist-web` to GitHub Pages on every push to `main`.
+This repo includes a GitHub Actions  workflow that builds and deploys `my-app/dist-web` to GitHub Pages on every push to `main`.
 
 To enable:
 - In GitHub, go to Settings > Pages.
