@@ -891,6 +891,14 @@ const applyModifier = (record: PortionRecord, modifier: OrderModifier | null) =>
   return record.amount;
 };
 
+const createButton = (text: string, className: string) => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = text;
+  return button;
+};
+
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) {
   throw new Error('Renderer root missing');
@@ -927,26 +935,11 @@ const setView = (view: AppView) => {
 
 const topNav = document.createElement('nav');
 topNav.className = 'top-nav';
-const navMenuButton = document.createElement('button');
-navMenuButton.type = 'button';
-navMenuButton.className = 'ghost-btn small-btn';
-navMenuButton.textContent = 'Menu';
-const navGameButton = document.createElement('button');
-navGameButton.type = 'button';
-navGameButton.className = 'ghost-btn small-btn';
-navGameButton.textContent = 'Game';
-const navLeaderboardButton = document.createElement('button');
-navLeaderboardButton.type = 'button';
-navLeaderboardButton.className = 'ghost-btn small-btn';
-navLeaderboardButton.textContent = 'Leaderboard';
-const navReferenceButton = document.createElement('button');
-navReferenceButton.type = 'button';
-navReferenceButton.className = 'ghost-btn small-btn';
-navReferenceButton.textContent = 'Reference';
-const navAboutButton = document.createElement('button');
-navAboutButton.type = 'button';
-navAboutButton.className = 'ghost-btn small-btn';
-navAboutButton.textContent = 'About';
+const navMenuButton = createButton('Menu', 'ghost-btn small-btn');
+const navGameButton = createButton('Game', 'ghost-btn small-btn');
+const navLeaderboardButton = createButton('Leaderboard', 'ghost-btn small-btn');
+const navReferenceButton = createButton('Reference', 'ghost-btn small-btn');
+const navAboutButton = createButton('About', 'ghost-btn small-btn');
 topNav.append(
   navMenuButton,
   navGameButton,
@@ -976,14 +969,8 @@ menuAuthLabel.className = 'menu-auth-label';
 menuAuthLabel.textContent = 'Account';
 const menuAuthButtons = document.createElement('div');
 menuAuthButtons.className = 'menu-auth-buttons';
-const menuAuthSignIn = document.createElement('button');
-menuAuthSignIn.type = 'button';
-menuAuthSignIn.className = 'ghost-btn small-btn';
-menuAuthSignIn.textContent = 'Sign in / Create account';
-const menuAuthSignOut = document.createElement('button');
-menuAuthSignOut.type = 'button';
-menuAuthSignOut.className = 'secondary-btn small-btn';
-menuAuthSignOut.textContent = 'Sign out';
+const menuAuthSignIn = createButton('Sign in / Create account', 'ghost-btn small-btn');
+const menuAuthSignOut = createButton('Sign out', 'secondary-btn small-btn');
 menuAuthButtons.append(menuAuthSignIn, menuAuthSignOut);
 const menuAuthStatus = document.createElement('span');
 menuAuthStatus.className = 'menu-auth-status';
@@ -991,22 +978,10 @@ menuAuth.append(menuAuthLabel, menuAuthButtons, menuAuthStatus);
 menuHeader.append(menuTitleWrap);
 const menuGrid = document.createElement('div');
 menuGrid.className = 'menu-grid';
-const menuStart = document.createElement('button');
-menuStart.type = 'button';
-menuStart.className = 'primary-btn menu-card';
-menuStart.textContent = 'Start Training';
-const menuLeaderboard = document.createElement('button');
-menuLeaderboard.type = 'button';
-menuLeaderboard.className = 'secondary-btn menu-card';
-menuLeaderboard.textContent = 'View Leaderboard';
-const menuReference = document.createElement('button');
-menuReference.type = 'button';
-menuReference.className = 'ghost-btn menu-card';
-menuReference.textContent = 'Reference Sheet';
-const menuAbout = document.createElement('button');
-menuAbout.type = 'button';
-menuAbout.className = 'ghost-btn menu-card';
-menuAbout.textContent = 'How to Play';
+const menuStart = createButton('Start Training', 'primary-btn menu-card');
+const menuLeaderboard = createButton('View Leaderboard', 'secondary-btn menu-card');
+const menuReference = createButton('Reference Sheet', 'ghost-btn menu-card');
+const menuAbout = createButton('How to Play', 'ghost-btn menu-card');
 menuGrid.append(menuStart, menuLeaderboard, menuReference, menuAbout);
 menuSection.append(menuHeader, menuGrid);
 const menuAuthSection = document.createElement('section');
@@ -1044,10 +1019,7 @@ summarySection.className = 'order-summary';
 summarySection.dataset.view = 'game';
 const summaryTitle = document.createElement('h2');
 summaryTitle.textContent = 'Build this order';
-const specialToggle = document.createElement('button');
-specialToggle.type = 'button';
-specialToggle.className = 'toggle-btn';
-specialToggle.textContent = 'Special requests: On';
+const specialToggle = createButton('Special requests: On', 'toggle-btn');
 const orderMeta = document.createElement('div');
 orderMeta.className = 'order-meta';
 
@@ -1094,20 +1066,11 @@ fieldGrid.className = 'field-grid';
 const buttonRow = document.createElement('div');
 buttonRow.className = 'button-row';
 
-const checkButton = document.createElement('button');
-checkButton.className = 'primary-btn';
-checkButton.type = 'button';
-checkButton.textContent = 'Lock in portions';
+const checkButton = createButton('Lock in portions', 'primary-btn');
 
-const revealButton = document.createElement('button');
-revealButton.className = 'ghost-btn';
-revealButton.type = 'button';
-revealButton.textContent = 'Show answers';
+const revealButton = createButton('Show answers', 'ghost-btn');
 
-const nextButton = document.createElement('button');
-nextButton.className = 'secondary-btn';
-nextButton.type = 'button';
-nextButton.textContent = 'Next order';
+const nextButton = createButton('Next order', 'secondary-btn');
 nextButton.disabled = true;
 
 buttonRow.append(checkButton, revealButton, nextButton);
@@ -1136,14 +1099,8 @@ const authTitle = document.createElement('h4');
 authTitle.textContent = 'Sign in or create an account to submit scores';
 const authActions = document.createElement('div');
 authActions.className = 'auth-actions';
-const authGoogle = document.createElement('button');
-authGoogle.type = 'button';
-authGoogle.className = 'ghost-btn small-btn';
-authGoogle.textContent = 'Google';
-const authSignOut = document.createElement('button');
-authSignOut.type = 'button';
-authSignOut.className = 'secondary-btn small-btn';
-authSignOut.textContent = 'Sign out';
+const authGoogle = createButton('Google', 'ghost-btn small-btn');
+const authSignOut = createButton('Sign out', 'secondary-btn small-btn');
 authActions.append(authGoogle, authSignOut);
 const authStatus = document.createElement('p');
 authStatus.className = 'leaderboard-status';
@@ -1161,14 +1118,8 @@ nameInput.maxLength = NAME_MAX_LENGTH;
 nameInput.placeholder = 'Enter name';
 const nameActions = document.createElement('div');
 nameActions.className = 'leaderboard-actions';
-const saveNameButton = document.createElement('button');
-saveNameButton.type = 'button';
-saveNameButton.className = 'primary-btn small-btn';
-saveNameButton.textContent = 'Save name';
-const editNameButton = document.createElement('button');
-editNameButton.type = 'button';
-editNameButton.className = 'ghost-btn small-btn';
-editNameButton.textContent = 'Change';
+const saveNameButton = createButton('Save name', 'primary-btn small-btn');
+const editNameButton = createButton('Change', 'ghost-btn small-btn');
 nameActions.append(saveNameButton, editNameButton);
 nameBlock.append(nameLabel, nameInput, nameActions);
 
