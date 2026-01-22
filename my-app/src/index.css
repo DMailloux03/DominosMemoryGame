@@ -197,6 +197,11 @@ body {
   order: -1;
 }
 
+.menu-auth-debug {
+  font-size: 0.75rem;
+  color: #8f97b1;
+}
+
 
 .menu-grid {
   display: grid;

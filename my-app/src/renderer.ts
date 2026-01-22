@@ -974,7 +974,9 @@ const menuAuthSignOut = createButton('Sign out', 'secondary-btn small-btn');
 menuAuthButtons.append(menuAuthSignIn, menuAuthSignOut);
 const menuAuthStatus = document.createElement('span');
 menuAuthStatus.className = 'menu-auth-status';
-menuAuth.append(menuAuthLabel, menuAuthButtons, menuAuthStatus);
+const menuAuthDebug = document.createElement('span');
+menuAuthDebug.className = 'menu-auth-debug';
+menuAuth.append(menuAuthLabel, menuAuthButtons, menuAuthStatus, menuAuthDebug);
 menuHeader.append(menuTitleWrap);
 const menuGrid = document.createElement('div');
 menuGrid.className = 'menu-grid';
@@ -1322,13 +1324,16 @@ const updateAuthUI = (user: User | null) => {
   if (!supabase) {
     authStatus.textContent = 'Add Supabase keys to enable sign in.';
     menuAuthStatus.textContent = 'Supabase keys required';
+    menuAuthDebug.textContent = 'Supabase URL: missing';
   } else if (hasAuth) {
     const display = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? user?.email ?? 'Signed in';
     authStatus.textContent = `Signed in as ${display}.`;
     menuAuthStatus.textContent = display;
+    menuAuthDebug.textContent = `Supabase URL: ${SUPABASE_URL ? 'loaded' : 'missing'}`;
   } else {
     authStatus.textContent = 'Sign in to submit scores to the global leaderboard.';
     menuAuthStatus.textContent = 'Not signed in';
+    menuAuthDebug.textContent = `Supabase URL: ${SUPABASE_URL ? 'loaded' : 'missing'}`;
   }
 
   if (hasAuth) {
