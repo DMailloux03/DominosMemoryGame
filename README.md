@@ -1,5 +1,5 @@
 # DominosMemoryGame
-Memory game for how many ounces on a pizza and what goes on a pizza for speciality pizzas
+Memory game for dominos employees on the makeline
 
 ## PWA build and install
 Build the web version:
