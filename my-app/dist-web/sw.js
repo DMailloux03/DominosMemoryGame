@@ -1,5 +1,5 @@
-const CACHE_NAME = 'dominos-portion-trainer-v1';
-const RUNTIME_CACHE = 'dominos-portion-trainer-runtime-v1';
+const CACHE_NAME = 'dominos-portion-trainer-v2';
+const RUNTIME_CACHE = 'dominos-portion-trainer-runtime-v2';
 const indexUrl = new URL('index.html', self.registration.scope).toString();
 const PRECACHE_URLS = [
   './',
