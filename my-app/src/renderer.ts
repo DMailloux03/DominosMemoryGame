@@ -917,7 +917,7 @@ const title = document.createElement('h1');
 title.textContent = "Domino's Portion Trainer";
 const subtitle = document.createElement('p');
 subtitle.textContent =
-  'Site Builds each item in order by order. Earn points for speed and accuracy, and chase a perfect streak.';
+  'Work through 20 orders and score points for speed and accuracy. Finish the set, then replay to beat your best.';
 const toppingsReminder = document.createElement('p');
 toppingsReminder.className = 'topping-reminder';
 toppingsReminder.textContent =
@@ -1851,7 +1851,11 @@ const handleCheck = () => {
 
   score.answered += 1;
   const elapsedSeconds = (performance.now() - orderStartedAt) / 1000;
-  const speedBonus = getSpeedBonus(elapsedSeconds);
+  const rawSpeedBonus = getSpeedBonus(elapsedSeconds);
+  const speedBonus =
+    currentFields.length > 0
+      ? Math.round(rawSpeedBonus * (correctCount / currentFields.length))
+      : 0;
   const basePoints = correctCount * POINTS_PER_CORRECT - incorrectCount * POINTS_PER_WRONG;
   const earnedPoints = Math.max(0, basePoints + speedBonus);
   score.points += earnedPoints;
@@ -1865,8 +1869,9 @@ const handleCheck = () => {
     );
   } else {
     score.streak = 0;
+    const bonusText = speedBonus > 0 ? `, ${speedBonus} speed bonus` : '';
     setFeedback(
-      `+${earnedPoints} points (${correctCount} correct, ${incorrectCount} wrong, ${speedBonus} speed bonus).`,
+      `+${earnedPoints} points (${correctCount} correct, ${incorrectCount} wrong${bonusText}).`,
       'wrong',
     );
   }
