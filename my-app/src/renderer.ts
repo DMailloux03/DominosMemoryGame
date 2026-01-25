@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+﻿import { createClient } from "@supabase/supabase-js";
 import type { User } from "@supabase/supabase-js";
 import "./index.css";
 
@@ -917,11 +917,11 @@ const title = document.createElement('h1');
 title.textContent = "Domino's Portion Trainer";
 const subtitle = document.createElement('p');
 subtitle.textContent =
-  'Build each pizza order by order. Earn points for speed and accuracy, and chase a perfect streak.';
+  'Site Builds each item in order by order. Earn points for speed and accuracy, and chase a perfect streak.';
 const toppingsReminder = document.createElement('p');
 toppingsReminder.className = 'topping-reminder';
 toppingsReminder.textContent =
-  'Remember: cheese never counts as a topping, and Gluten Free crust only comes in a 10" pizza.';
+  'If you have any feedback for the site or ounces please let me know.';
 headerTitleWrap.append(title, subtitle, toppingsReminder);
 headerContent.append(headerTitleWrap);
 header.append(headerContent);
