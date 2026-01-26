@@ -917,7 +917,7 @@ const title = document.createElement('h1');
 title.textContent = "Domino's Portion Trainer";
 const subtitle = document.createElement('p');
 subtitle.textContent =
-  'Work through 20 orders and score points for speed and accuracy. Finish the set, then replay to beat your best.';
+  'Complete a 20-order run. The counter shows how many orders are left, and your score climbs with accuracy and speed.';
 const toppingsReminder = document.createElement('p');
 toppingsReminder.className = 'topping-reminder';
 toppingsReminder.textContent =
@@ -1162,12 +1162,13 @@ const aboutTitle = document.createElement('h3');
 aboutTitle.textContent = 'How to play';
 const aboutText = document.createElement('p');
 aboutText.textContent =
-  'Start a round, read the order summary, and enter the correct portion amounts. ' +
-  'You earn more points for speed and perfect streaks. Use the reference sheet to study.';
+  'You have 20 orders to complete. The order counter shows how many are left. ' +
+  'Enter the portion amounts, lock in your answers, and keep your streak going.';
 const aboutList = document.createElement('ul');
 aboutList.className = 'about-list';
 const aboutItems = [
-  'Check answers to score points and keep your streak.',
+  'Points = correct answers minus wrong answers, plus a speed bonus that scales with correct answers.',
+  'Speed bonus only helps the items you got right, so accuracy matters most.',
   'Use the special request toggle to practice modifiers.',
   'Leaderboard syncs when you save a display name.',
 ];
@@ -1588,7 +1589,8 @@ const describeToppings = (order: PizzaOrder) => {
 
 const renderSummary = (order: GameOrder) => {
   summaryList.innerHTML = '';
-  metaOrder.valueEl.textContent = `#${score.answered + 1}`;
+  const remaining = Math.max(0, MAX_ORDERS - score.answered);
+  metaOrder.valueEl.textContent = `${remaining} left`;
   if (order.kind === 'Pasta') {
     metaFullName.valueEl.textContent = `${order.recipe} - ${order.size}`;
     metaSize.valueEl.textContent = order.size;
